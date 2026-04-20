@@ -13,8 +13,8 @@ class CentralizedModel:
     Centralized training baseline.
 
     All client CSVs are concatenated into one dataset and a single XGBoost
-    model is trained.  This represents the upper-bound scenario where data
-    privacy constraints are ignored.
+    model is trained on the first 80 % (temporal split).  The held-out last
+    20 % of the combined sequence is used for evaluation.
     """
 
     def __init__(self, xcfl_config: XCFLConfig, model_config: ModelConfig) -> None:
@@ -26,18 +26,13 @@ class CentralizedModel:
         self._y_test: Optional[pd.Series] = None
 
     def load_and_train(self) -> None:
-        """Load all client data, combine, split, and train."""
         cfg = self.xcfl_config
         csv_files = load_client_files(cfg.data_folder)
         df_all = load_combined_dataframe(
             csv_files, cfg.data_folder, cfg.feature_cols, cfg.target_col, cfg.csv_delimiter
         )
-        self._fit(df_all)
-
-    def _fit(self, df: pd.DataFrame) -> None:
-        cfg = self.xcfl_config
-        X = df.drop(columns=[cfg.target_col])
-        y = df[cfg.target_col]
+        X = df_all.drop(columns=[cfg.target_col])
+        y = df_all[cfg.target_col]
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=cfg.test_size, shuffle=cfg.shuffle
@@ -56,11 +51,9 @@ class CentralizedModel:
         self._model.fit(X_train, y_train)
 
     def predict(self, X: Optional[pd.DataFrame] = None) -> np.ndarray:
-        """Predict on X, or on the held-out test set if X is None."""
         if self._model is None:
             raise RuntimeError("Call load_and_train() first.")
-        data = X if X is not None else self._X_test
-        return self._model.predict(data)
+        return self._model.predict(X if X is not None else self._X_test)
 
     @property
     def X_test(self) -> pd.DataFrame:

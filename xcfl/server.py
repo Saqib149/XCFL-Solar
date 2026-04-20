@@ -1,134 +1,127 @@
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from collections import defaultdict
 from typing import Dict, List, Optional
 
 from .client import FederatedClient
+from .config import ModelConfig
 
 
 class XCFLServer:
     """
     XCFL aggregation server.
 
-    Implements the two-level weighted aggregation from the paper:
-
-      1. Compute per-client weights:   w_i = (size_i / Σsize) * (shap_i / Σshap)
-         then renormalize so Σw_i = 1.
-
-      2. Cluster-level aggregation:    cluster_pred[k] = Σ_{i∈k} w_i * model_i(X)
-
-      3. Global aggregation:           final_pred = Σ_k (W_k / ΣW) * cluster_pred[k]
-         where W_k = Σ_{i∈k} w_i.
-
-    Because the w_i already sum to 1, steps 2 and 3 together reduce to a single
-    weighted average, but the two-level structure mirrors the cluster-aware
-    update process described in the paper.
+    Algorithm (per the paper):
+      1. Compute per-client XCFL weights:  w_i = (size_i * shap_i) / sum(size_j * shap_j)
+      2. Cluster clients (KMeans on mean feature vectors).
+      3. For each cluster k, train one dedicated XGBoost model on the combined
+         training data of all cluster members (equal sample weights — the SHAP
+         scores already determined cluster membership via the weight ranking).
+      4. At inference time, each client's test data is predicted by its own
+         cluster's model only — no cross-cluster contamination.
     """
 
     def __init__(
         self,
         clients: List[FederatedClient],
         cluster_labels: np.ndarray,
+        model_config: ModelConfig,
     ) -> None:
         if len(clients) != len(cluster_labels):
             raise ValueError("clients and cluster_labels must have the same length.")
         self.clients = clients
         self.cluster_labels = cluster_labels
+        self.model_config = model_config
 
         self._weights: Optional[np.ndarray] = None
-        self._cluster_weights: Optional[Dict[int, List[float]]] = None
-        self._cluster_predictions: Optional[Dict[int, np.ndarray]] = None
+        self._cluster_models: Optional[Dict[int, xgb.XGBRegressor]] = None
 
     # ------------------------------------------------------------------
     # Step 1 – Weight computation
     # ------------------------------------------------------------------
 
     def compute_xcfl_weights(self) -> np.ndarray:
-        """
-        Compute and store XCFL client weights.
-
-        w_i ∝ (normalized dataset size) × (normalized SHAP score)
-        """
+        """w_i ∝ dataset_size_i × shap_score_i, renormalised to sum to 1."""
         sizes = np.array([c.dataset_size for c in self.clients], dtype=float)
         shap_scores = np.array([c.shap_score for c in self.clients], dtype=float)
-
-        sizes /= sizes.sum()
-        shap_scores /= shap_scores.sum()
-
         raw = sizes * shap_scores
         self._weights = raw / raw.sum()
         return self._weights
 
     # ------------------------------------------------------------------
-    # Step 2 – Cluster-level aggregation
+    # Step 2 – Train one XGBoost model per cluster
     # ------------------------------------------------------------------
 
-    def cluster_aggregate(self, X_test: pd.DataFrame) -> Dict[int, np.ndarray]:
+    def train_cluster_models(self) -> Dict[int, xgb.XGBRegressor]:
         """
-        Produce one prediction array per cluster via weighted model averaging.
-
-        Must call compute_xcfl_weights() first.
+        Pool training data from all clients in each cluster and fit one
+        XGBoost model per cluster with equal sample weights.
         """
         self._assert_weights()
 
-        cluster_client_map: Dict[int, List[FederatedClient]] = defaultdict(list)
-        cluster_weight_map: Dict[int, List[float]] = defaultdict(list)
-
+        cluster_idx_map: Dict[int, List[int]] = defaultdict(list)
         for i, label in enumerate(self.cluster_labels):
-            cluster_client_map[int(label)].append(self.clients[i])
-            cluster_weight_map[int(label)].append(float(self._weights[i]))
+            cluster_idx_map[int(label)].append(i)
 
-        self._cluster_weights = dict(cluster_weight_map)
+        self._cluster_models = {}
+        for cluster_id, indices in cluster_idx_map.items():
+            members = [self.clients[i] for i in indices]
 
-        self._cluster_predictions = {}
-        for label, members in cluster_client_map.items():
-            preds = np.zeros(len(X_test))
-            for client, w in zip(members, cluster_weight_map[label]):
-                preds += w * client.predict(X_test)
-            self._cluster_predictions[label] = preds
+            X_combined = pd.concat(
+                [m.X_train for m in members], ignore_index=True
+            )
+            y_combined = pd.concat(
+                [m.y_train for m in members], ignore_index=True
+            )
 
-        return dict(self._cluster_predictions)
+            mc = self.model_config
+            model = xgb.XGBRegressor(
+                n_estimators=mc.n_estimators,
+                max_depth=mc.max_depth,
+                learning_rate=mc.learning_rate,
+                random_state=mc.random_state,
+                verbosity=mc.verbosity,
+            )
+            model.fit(X_combined, y_combined)
+            self._cluster_models[cluster_id] = model
+
+        return self._cluster_models
 
     # ------------------------------------------------------------------
-    # Step 3 – Global aggregation
+    # Step 3 – Cluster-specialised inference
     # ------------------------------------------------------------------
 
-    def global_aggregate(self, X_test: pd.DataFrame) -> np.ndarray:
+    def predict_per_client(self) -> np.ndarray:
         """
-        Combine cluster predictions into a single global prediction.
-
-        Must call cluster_aggregate() first.
+        Predict each client's test split using its cluster's model.
+        Output is concatenated in clients-list order, matching combine_test_sets().
         """
-        self._assert_cluster_preds()
+        if self._cluster_models is None:
+            raise RuntimeError("Call train_cluster_models() first.")
 
-        cluster_total_w = {
-            label: sum(ws) for label, ws in self._cluster_weights.items()
-        }
-        total_w = sum(cluster_total_w.values())
-        cluster_level_w = {label: w / total_w for label, w in cluster_total_w.items()}
-
-        final = np.zeros(len(X_test))
-        for label, pred in self._cluster_predictions.items():
-            final += cluster_level_w[label] * pred
-
-        return final
+        all_preds: List[np.ndarray] = []
+        for i, client in enumerate(self.clients):
+            cluster_id = int(self.cluster_labels[i])
+            preds = self._cluster_models[cluster_id].predict(client.X_test)
+            all_preds.append(preds)
+        return np.concatenate(all_preds)
 
     # ------------------------------------------------------------------
-    # Convenience: run all three steps in sequence
+    # Convenience: run all steps in sequence
     # ------------------------------------------------------------------
 
-    def run(self, X_test: pd.DataFrame) -> np.ndarray:
-        """Compute weights, cluster-aggregate, then globally aggregate."""
+    def run(self) -> np.ndarray:
+        """Compute weights → train cluster models → predict per client."""
         self.compute_xcfl_weights()
-        self.cluster_aggregate(X_test)
-        return self.global_aggregate(X_test)
+        self.train_cluster_models()
+        return self.predict_per_client()
 
     # ------------------------------------------------------------------
     # Diagnostics
     # ------------------------------------------------------------------
 
     def weight_summary(self) -> pd.DataFrame:
-        """Return a DataFrame with per-client weights and cluster assignments."""
         self._assert_weights()
         return pd.DataFrame({
             "client_id": [c.client_id for c in self.clients],
@@ -138,15 +131,6 @@ class XCFLServer:
             "xcfl_weight": self._weights,
         })
 
-    def cluster_weight_summary(self) -> pd.DataFrame:
-        """Return a DataFrame with total weight per cluster."""
-        self._assert_cluster_preds()
-        rows = [
-            {"cluster": label, "total_weight": sum(ws)}
-            for label, ws in self._cluster_weights.items()
-        ]
-        return pd.DataFrame(rows).sort_values("cluster").reset_index(drop=True)
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -154,7 +138,3 @@ class XCFLServer:
     def _assert_weights(self) -> None:
         if self._weights is None:
             raise RuntimeError("Call compute_xcfl_weights() first.")
-
-    def _assert_cluster_preds(self) -> None:
-        if self._cluster_predictions is None:
-            raise RuntimeError("Call cluster_aggregate() first.")

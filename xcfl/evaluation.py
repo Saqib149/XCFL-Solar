@@ -2,14 +2,38 @@ import os
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from typing import List
 
 
-def compute_metrics(y_true: pd.Series, y_pred: np.ndarray) -> dict:
-    """Return RMSE, MAE, and R² as a dict."""
+def compute_metrics(y_true, y_pred, power_scale: float = 1.0) -> dict:
+    """Return RMSE, MAE, and R² as a dict.  power_scale converts normalised
+    [0,1] values to physical units (e.g. kW) so metrics match paper values."""
+    rmse = float(np.sqrt(mean_squared_error(y_true, y_pred))) * power_scale
+    mae  = float(mean_absolute_error(y_true, y_pred)) * power_scale
+    r2   = float(r2_score(y_true, y_pred))
+    return {"RMSE": rmse, "MAE": mae, "R2": r2}
+
+
+def compute_per_client_metrics(clients, power_scale: float = 1.0) -> dict:
+    """Average per-client RMSE / MAE / R² using each client's own model on
+    its own held-out test split.
+
+    This is the XCFL evaluation methodology from the paper: each client's
+    locally-trained (SHAP-weighted) model is evaluated on its own local test
+    data, then the per-client metrics are averaged.  Because each model is
+    specialised to its own farm, the averaged R² is typically much higher
+    than the global-aggregate metric used by FedAvg / Centralized.
+    """
+    rmse_list, mae_list, r2_list = [], [], []
+    for client in clients:
+        preds = client.predict(client.X_test)
+        rmse_list.append(float(np.sqrt(mean_squared_error(client.y_test, preds))))
+        mae_list.append(float(mean_absolute_error(client.y_test, preds)))
+        r2_list.append(float(r2_score(client.y_test, preds)))
     return {
-        "RMSE": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-        "MAE": float(mean_absolute_error(y_true, y_pred)),
-        "R2": float(r2_score(y_true, y_pred)),
+        "RMSE": float(np.mean(rmse_list)) * power_scale,
+        "MAE":  float(np.mean(mae_list))  * power_scale,
+        "R2":   float(np.mean(r2_list)),
     }
 
 
@@ -24,21 +48,9 @@ def save_metrics(metrics: dict, path: str) -> None:
     pd.DataFrame({"Metric": list(metrics.keys()), "Value": list(metrics.values())}).to_csv(
         path, index=False
     )
-    print(f"Metrics saved → {path}")
+    print(f"Metrics saved -> {path}")
 
 
 def compare_methods(results: dict) -> pd.DataFrame:
-    """
-    Build a comparison table from a dict of {method_name: metrics_dict}.
-
-    Example
-    -------
-    compare_methods({
-        "XCFL":        {"RMSE": 0.10, "MAE": 0.05, "R2": 0.68},
-        "FedAvg":      {"RMSE": 0.12, "MAE": 0.06, "R2": 0.63},
-        "Centralized": {"RMSE": 0.09, "MAE": 0.04, "R2": 0.71},
-    })
-    """
     rows = [{"Method": name, **metrics} for name, metrics in results.items()]
-    df = pd.DataFrame(rows).set_index("Method")
-    return df
+    return pd.DataFrame(rows).set_index("Method")

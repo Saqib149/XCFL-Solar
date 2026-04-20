@@ -8,7 +8,13 @@ from .config import XCFLConfig, ModelConfig
 from .client import FederatedClient
 from .clustering import ClientClusterer
 from .server import XCFLServer
-from .evaluation import compute_metrics, print_metrics, save_metrics, compare_methods
+from .evaluation import (
+    compute_metrics,
+    compute_per_client_metrics,
+    print_metrics,
+    save_metrics,
+    compare_methods,
+)
 
 __all__ = [
     "XCFLConfig",
@@ -17,6 +23,7 @@ __all__ = [
     "ClientClusterer",
     "XCFLServer",
     "compute_metrics",
+    "compute_per_client_metrics",
     "print_metrics",
     "save_metrics",
     "compare_methods",
