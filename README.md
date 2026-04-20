@@ -5,7 +5,7 @@ A Python implementation of the **XCFL** framework introduced in:
 > *Explainable Clustered Federated Learning for Solar Energy Forecasting*  
 > Energies, 2025, 18(9), 2380 — https://www.mdpi.com/1996-1073/18/9/2380
 
-XCFL extends Clustered Federated Learning (CFL) with **SHAP-based explainability**: each client's contribution to the global model is weighted by both its dataset size and the aggregate SHAP feature-importance score of its local model. This makes the aggregation process transparent and data-driven.
+XCFL extends Clustered Federated Learning (CFL) with **SHAP-based explainability**: each client's contribution to the global model is weighted by both its dataset size and the aggregate SHAP feature-importance contribution score to its clustered model. This makes the aggregation process transparent and data-driven.
 
 ---
 
