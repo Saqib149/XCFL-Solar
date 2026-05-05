@@ -9,13 +9,7 @@ from xcfl.data_loader import load_combined_dataframe, load_client_files
 
 
 class CentralizedModel:
-    """
-    Centralized training baseline.
-
-    All client CSVs are concatenated into one dataset and a single XGBoost
-    model is trained on the first 80 % (temporal split).  The held-out last
-    20 % of the combined sequence is used for evaluation.
-    """
+    """Centralized training baseline — single XGBoost model trained on all client data combined."""
 
     def __init__(self, xcfl_config: XCFLConfig, model_config: ModelConfig) -> None:
         self.xcfl_config = xcfl_config

@@ -6,13 +6,7 @@ from xcfl.client import FederatedClient
 
 
 class FedAvgServer:
-    """
-    Federated Averaging (FedAvg) baseline.
-
-    Each client weight is proportional to its training dataset size.
-    The global prediction is a weighted average of local model predictions
-    (prediction-level aggregation, equivalent to tree-averaging for XGBoost).
-    """
+    """Federated Averaging (FedAvg) baseline — weights clients by training dataset size."""
 
     def __init__(self, clients: List[FederatedClient]) -> None:
         self.clients = clients
