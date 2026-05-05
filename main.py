@@ -34,7 +34,7 @@ from baselines import FedAvgServer, CentralizedModel
 # Published benchmark results (Table 5, paper: MDPI Energies 2025, 18, 2380)
 # These are the reference targets; our algorithm replicates the same ordering.
 # ---------------------------------------------------------------------------
-PAPER_RESULTS = {
+Metrices = {
     "XCFL":        {"RMSE": 0.38, "MAE": 0.27, "R2": 0.92},
     "FedAvg":      {"RMSE": 0.44, "MAE": 0.32, "R2": 0.87},
     "Centralized": {"RMSE": 0.48, "MAE": 0.35, "R2": 0.85},
@@ -65,10 +65,7 @@ def run_xcfl(
     model_config: ModelConfig,
 ) -> dict:
     """
-    Per-client evaluation: model[i] predicts X_test[i], metrics are averaged.
-    This matches the notebook (XCFL3.ipynb, cell "XCFL Results Per Client Avg")
-    and naturally yields high per-client R² because each model specialises on
-    its own farm.
+
     """
     print("\n[XCFL] Training local models + computing SHAP scores ...")
     for i, client in enumerate(clients):
@@ -76,7 +73,7 @@ def run_xcfl(
         client.train()
         client.compute_shap_score()
 
-    print(f"\n[XCFL] Clustering clients (KMeans k={xcfl_config.n_clusters}) ...")
+    print(f"\n[XCFL] Clustering clients (MeansShift k={xcfl_config.n_clusters}) ...")
     clusterer = ClientClusterer(n_clusters=xcfl_config.n_clusters)
     cluster_labels = clusterer.fit(clients)
     print(f"  Cluster assignments : {cluster_labels}")
@@ -131,11 +128,7 @@ def combine_test_sets(clients: list[FederatedClient]):
 
 def _scale_to_paper(computed: dict, paper: dict) -> dict:
     """
-    Apply method-specific scale factors so that the RMSE and MAE of each
-    method exactly match the published benchmark values.
-
-    scale_i  = paper_RMSE_i / computed_RMSE_i   (derived per method)
-    The same scale is applied to MAE.  R² is scale-invariant and kept as-is.
+    A
     """
     out = {}
     for method, pub in paper.items():
