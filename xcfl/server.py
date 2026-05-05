@@ -31,11 +31,47 @@ class XCFLServer:
     # ------------------------------------------------------------------
 
     def compute_xcfl_weights(self) -> np.ndarray:
-        """w_i ∝ dataset_size_i × shap_score_i, renormalised to sum to 1."""
-        sizes = np.array([c.dataset_size for c in self.clients], dtype=float)
-        shap_scores = np.array([c.shap_score for c in self.clients], dtype=float)
-        raw = sizes * shap_scores
-        self._weights = raw / raw.sum()
+        """
+        Compute per-client weights using Eq. 2 (paper):
+
+            w_k = Σ_f [ δ_f^(k) / Σ_{k'∈Cm} δ_f^(k') ] * [ 1 - Σ_{j≠f} a_j ]
+
+        where a_j = Σ_{k∈Cm} δ_j^(k) / Σ_{j'} Σ_{k∈Cm} δ_{j'}^(k)
+        is the normalized cluster-level importance of feature j.
+        Weights are computed independently per cluster then assembled.
+        """
+        weights = np.zeros(len(self.clients))
+
+        cluster_idx_map: dict = defaultdict(list)
+        for i, label in enumerate(self.cluster_labels):
+            cluster_idx_map[int(label)].append(i)
+
+        for indices in cluster_idx_map.values():
+            members = [self.clients[i] for i in indices]
+
+            # delta: shape (K_m, F) — δ_f^(k) per client per feature
+            delta = np.array([c.shap_per_feature for c in members], dtype=float)
+
+            # a_j: cluster-level normalized feature importance, shape (F,)
+            cluster_delta = delta.sum(axis=0)                          # Σ_{k} δ_j^(k)
+            total = cluster_delta.sum()
+            a = cluster_delta / total if total > 0 else np.ones(delta.shape[1]) / delta.shape[1]
+
+            # redundancy term per feature: 1 - Σ_{j≠f} a_j = a_f
+            redundancy = a                                              # shape (F,)
+
+            # normalized SHAP per client per feature: δ_f^(k) / Σ_{k'} δ_f^(k')
+            denom = cluster_delta.copy()
+            denom[denom == 0] = 1.0                                    # avoid div-by-zero
+            norm_shap = delta / denom                                  # shape (K_m, F)
+
+            # w_k = Σ_f  norm_shap[k,f] * redundancy[f]
+            client_weights = (norm_shap * redundancy).sum(axis=1)      # shape (K_m,)
+
+            for local_i, global_i in enumerate(indices):
+                weights[global_i] = client_weights[local_i]
+
+        self._weights = weights
         return self._weights
 
     # ------------------------------------------------------------------

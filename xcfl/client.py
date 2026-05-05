@@ -38,6 +38,7 @@ class FederatedClient:
         self._y_train: pd.Series | None = None
         self._y_test: pd.Series | None = None
         self._shap_score: float | None = None
+        self._shap_per_feature: np.ndarray | None = None
         self._representation: np.ndarray | None = None
 
     # ------------------------------------------------------------------
@@ -82,7 +83,9 @@ class FederatedClient:
         X_sample = self._X_train.sample(sample_size, random_state=self.xcfl_config.random_state)
         shap_values = explainer.shap_values(X_sample)
 
-        self._shap_score = float(np.abs(shap_values).mean(axis=0).sum())
+        per_feature = np.abs(shap_values).mean(axis=0)   # δ_f^(k) for each feature f
+        self._shap_per_feature = per_feature
+        self._shap_score = float(per_feature.sum())
         return self._shap_score
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -124,6 +127,13 @@ class FederatedClient:
         if self._shap_score is None:
             raise RuntimeError("SHAP score not computed yet.")
         return self._shap_score
+
+    @property
+    def shap_per_feature(self) -> np.ndarray:
+        """Mean absolute SHAP value per feature — δ_f^(k) vector, shape (F,)."""
+        if self._shap_per_feature is None:
+            raise RuntimeError("SHAP score not computed yet.")
+        return self._shap_per_feature
 
     @property
     def representation(self) -> np.ndarray:
