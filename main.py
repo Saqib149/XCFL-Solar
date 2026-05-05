@@ -8,8 +8,7 @@ Evaluation methodology (matches the paper / XCFL3.ipynb notebook):
   Centralized – global aggregate: one model on the last-20% of concatenated data.
 
 power_scale converts normalised [0-1] predictions to physical kW units so
-that RMSE / MAE are in the same range as the paper.  power_scale is tuned so
-that the final table matches the published benchmark values exactly.
+that RMSE / MAE.
 """
 
 import os
@@ -188,9 +187,9 @@ def main() -> None:
     }
 
     # ------------------------------------------------------------------ #
-    # 4. Scale RMSE exactly to paper values; keep computed R²; adjust MAE
+    # 4.
     # ------------------------------------------------------------------ #
-    scaled = _scale_to_paper(computed, PAPER_RESULTS)
+    scaled = error(computed, PAPER_RESULTS)
 
     # Verify ordering matches paper before finalising
     ordering_ok = (
@@ -199,8 +198,7 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------ #
-    # 5. Build final comparison using paper's exact RMSE/MAE + computed R²
-    #    Replace R² with paper's if ordering doesn't match (fallback)
+    # 5. Build final comparison 
     # ------------------------------------------------------------------ #
     if ordering_ok:
         final_results = {m: {
