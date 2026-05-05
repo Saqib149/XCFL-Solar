@@ -27,6 +27,7 @@ from xcfl import (
     compare_methods,
 )
 from xcfl.data_loader import load_client_files
+from xcfl.config import select_features_by_pearson
 from baselines import FedAvgServer, CentralizedModel
 
 
@@ -154,7 +155,17 @@ def main() -> None:
     print("=" * 60)
 
     # ------------------------------------------------------------------ #
-    # 1. Load client files
+    # 1. Select top-8 features via Pearson correlation (paper Section 5.1)
+    # ------------------------------------------------------------------ #
+    xcfl_config.feature_cols = select_features_by_pearson(
+        data_folder=xcfl_config.data_folder,
+        target_col=xcfl_config.target_col,
+        n_features=xcfl_config.n_top_features,
+        delimiter=xcfl_config.csv_delimiter,
+    )
+
+    # ------------------------------------------------------------------ #
+    # 2. Load client files
     # ------------------------------------------------------------------ #
     csv_files = load_client_files(xcfl_config.data_folder)
     print(f"\nFound {len(csv_files)} client files in '{xcfl_config.data_folder}'")
