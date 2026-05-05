@@ -4,7 +4,7 @@ XCFL – Explainable Clustered Federated Learning for Solar Energy Forecasting.
 Paper: https://www.mdpi.com/1996-1073/18/9/2380
 """
 
-from .config import XCFLConfig, ModelConfig
+from .config import XCFLConfig, ModelConfig, select_features_by_pearson
 from .client import FederatedClient
 from .clustering import ClientClusterer
 from .server import XCFLServer
@@ -19,6 +19,7 @@ from .evaluation import (
 __all__ = [
     "XCFLConfig",
     "ModelConfig",
+    "select_features_by_pearson",
     "FederatedClient",
     "ClientClusterer",
     "XCFLServer",

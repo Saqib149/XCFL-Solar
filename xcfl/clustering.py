@@ -7,12 +7,7 @@ from .client import FederatedClient
 
 
 class ClientClusterer:
-    """
-    Groups federated clients by data similarity.
-
-    Uses KMeans when n_clusters is specified (recommended for reproducibility),
-    otherwise falls back to MeanShift auto-detection.
-    """
+    """Groups federated clients by data similarity using MeanShift clustering."""
 
     def __init__(self, n_clusters: Optional[int] = None) -> None:
         self.n_clusters = n_clusters

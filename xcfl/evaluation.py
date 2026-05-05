@@ -15,15 +15,7 @@ def compute_metrics(y_true, y_pred, power_scale: float = 1.0) -> dict:
 
 
 def compute_per_client_metrics(clients, power_scale: float = 1.0) -> dict:
-    """Average per-client RMSE / MAE / R² using each client's own model on
-    its own held-out test split.
-
-    This is the XCFL evaluation methodology from the paper: each client's
-    locally-trained (SHAP-weighted) model is evaluated on its own local test
-    data, then the per-client metrics are averaged.  Because each model is
-    specialised to its own farm, the averaged R² is typically much higher
-    than the global-aggregate metric used by FedAvg / Centralized.
-    """
+    """Average per-client RMSE / MAE / R² using each client's own model on its own test split."""
     rmse_list, mae_list, r2_list = [], [], []
     for client in clients:
         preds = client.predict(client.X_test)

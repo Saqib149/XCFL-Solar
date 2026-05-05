@@ -9,18 +9,7 @@ from .config import ModelConfig
 
 
 class XCFLServer:
-    """
-    XCFL aggregation server.
-
-    Algorithm (per the paper):
-      1. Compute per-client XCFL weights:  w_i = (size_i * shap_i) / sum(size_j * shap_j)
-      2. Cluster clients (KMeans on mean feature vectors).
-      3. For each cluster k, train one dedicated XGBoost model on the combined
-         training data of all cluster members (equal sample weights — the SHAP
-         scores already determined cluster membership via the weight ranking).
-      4. At inference time, each client's test data is predicted by its own
-         cluster's model only — no cross-cluster contamination.
-    """
+    """XCFL aggregation server: computes SHAP-weighted aggregation and trains cluster-specific models."""
 
     def __init__(
         self,
