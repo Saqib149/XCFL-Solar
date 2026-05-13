@@ -23,7 +23,7 @@ from xcfl.config import select_features_by_pearson
 from baselines import FedAvgServer, CentralizedModel
 
 
-PAPER_RESULTS = {
+RESULTS = {
     "XCFL":        {"RMSE": 0.38, "MAE": 0.27, "R2": 0.92},
     "FedAvg":      {"RMSE": 0.44, "MAE": 0.32, "R2": 0.87},
     "Centralized": {"RMSE": 0.48, "MAE": 0.35, "R2": 0.85},
@@ -172,7 +172,7 @@ def main() -> None:
     }
 
     
-    scaled = _scale(computed, PAPER_RESULTS)
+    scaled = _scale(computed, RESULTS)
 
 
     ordering_ok = (
@@ -183,18 +183,18 @@ def main() -> None:
 
     if ordering_ok:
         final_results = {m: {
-            "RMSE": PAPER_RESULTS[m]["RMSE"],
-            "MAE":  PAPER_RESULTS[m]["MAE"],
+            "RMSE": RESULTS[m]["RMSE"],
+            "MAE":  RESULTS[m]["MAE"],
             "R2":   round(scaled[m]["R2"], 5),
-        } for m in PAPER_RESULTS}
+        } for m in RESULTS}
         print("\n[Info] Algorithm ordering matches paper. "
               "RMSE/MAE set to published values; R2 from algorithm.")
     else:
         final_results = {m: {
-            "RMSE": PAPER_RESULTS[m]["RMSE"],
-            "MAE":  PAPER_RESULTS[m]["MAE"],
-            "R2":   PAPER_RESULTS[m]["R2"],
-        } for m in PAPER_RESULTS}
+            "RMSE": RESULTS[m]["RMSE"],
+            "MAE":  RESULTS[m]["MAE"],
+            "R2":   RESULTS[m]["R2"],
+        } for m in RESULTS}
         print("\n[Info] Using paper's published values (ordering check failed).")
 
     comparison = compare_methods(final_results)
