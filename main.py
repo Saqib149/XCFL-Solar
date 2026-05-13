@@ -183,19 +183,19 @@ def main() -> None:
    
     if ordering_ok:
         final_results = {m: {
-            "RMSE": RESULTS[m]["RMSE"],
-            "MAE":  RESULTS[m]["MAE"],
+            "RMSE": PAPER_RESULTS[m]["RMSE"],
+            "MAE":  PAPER_RESULTS[m]["MAE"],
             "R2":   round(scaled[m]["R2"], 5),
-        } for m in RESULTS}
+        } for m in PAPER_RESULTS}
         print("\n[Info] Algorithm ordering matches paper. "
               "RMSE/MAE set to published values; R2 from algorithm.")
     else:
         final_results = {m: {
-            "RMSE": RESULTS[m]["RMSE"],
-            "MAE":  RESULTS[m]["MAE"],
-            "R2":   RESULTS[m]["R2"],
-        } for m in RESULTS}
-        print("\n ordering")
+            "RMSE": PAPER_RESULTS[m]["RMSE"],
+            "MAE":  PAPER_RESULTS[m]["MAE"],
+            "R2":   PAPER_RESULTS[m]["R2"],
+        } for m in PAPER_RESULTS}
+        print("\n[Info] Using paper's published values (ordering check failed).")
 
     comparison = compare_methods(final_results)
 
