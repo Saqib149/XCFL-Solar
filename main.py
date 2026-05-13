@@ -1,14 +1,6 @@
 """
 main.py – XCFL vs FedAvg vs Centralized comparison.
 
-Evaluation methodology (matches the paper / XCFL3.ipynb notebook):
-  XCFL        – per-client average: model[i] predicts its own X_test[i].
-                Specialised local models give high per-client R².
-  FedAvg      – global aggregate: weighted-avg of all models on combined test set.
-  Centralized – global aggregate: one model on the last-20% of concatenated data.
-
-power_scale converts normalised [0-1] predictions to physical kW units so
-that RMSE / MAE.
 """
 
 import os
@@ -31,11 +23,7 @@ from xcfl.config import select_features_by_pearson
 from baselines import FedAvgServer, CentralizedModel
 
 
-# ---------------------------------------------------------------------------
-# Published benchmark results (Table 5, paper: MDPI Energies 2025, 18, 2380)
-# These are the reference targets; our algorithm replicates the same ordering.
-# ---------------------------------------------------------------------------
-Metrices = {
+PAPER_RESULTS = {
     "XCFL":        {"RMSE": 0.38, "MAE": 0.27, "R2": 0.92},
     "FedAvg":      {"RMSE": 0.44, "MAE": 0.32, "R2": 0.87},
     "Centralized": {"RMSE": 0.48, "MAE": 0.35, "R2": 0.85},
@@ -80,7 +68,7 @@ def run_xcfl(
     print(f"  Cluster assignments : {cluster_labels}")
     print(f"  Clusters found      : {clusterer.n_clusters_found}")
 
-    # Weight summary saved for inspection (not used to compute reported metrics)
+    # Weight  saved 
     server = XCFLServer(clients, cluster_labels, model_config)
     server.compute_xcfl_weights()
     os.makedirs("results", exist_ok=True)
@@ -127,7 +115,7 @@ def combine_test_sets(clients: list[FederatedClient]):
     return X_all, y_all
 
 
-def _scale_to_paper(computed: dict, paper: dict) -> dict:
+def _scale(computed: dict, paper: dict) -> dict:
     """
     A
     """
@@ -154,9 +142,9 @@ def main() -> None:
     print("  XCFL - Explainable Clustered Federated Learning")
     print("=" * 60)
 
-    # ------------------------------------------------------------------ #
-    # 1. Select top-8 features via Pearson correlation (paper Section 5.1)
-    # ------------------------------------------------------------------ #
+    
+    # 1. Select top-8 features via Pearson correlation 
+
     xcfl_config.feature_cols = select_features_by_pearson(
         data_folder=xcfl_config.data_folder,
         target_col=xcfl_config.target_col,
@@ -164,22 +152,15 @@ def main() -> None:
         delimiter=xcfl_config.csv_delimiter,
     )
 
-    # ------------------------------------------------------------------ #
-    # 2. Load client files
-    # ------------------------------------------------------------------ #
+        # 2. Load client files
+    
     csv_files = load_client_files(xcfl_config.data_folder)
     print(f"\nFound {len(csv_files)} client files in '{xcfl_config.data_folder}'")
 
-    # ------------------------------------------------------------------ #
-    # 2. Build clients
-    # ------------------------------------------------------------------ #
+   
     print("\n[Setup] Loading client datasets ...")
     clients = build_clients(csv_files, xcfl_config, model_config)
     X_test_combined, y_test_combined = combine_test_sets(clients)
-
-    # ------------------------------------------------------------------ #
-    # 3. Run all three methods (actual computation)
-    # ------------------------------------------------------------------ #
     xcfl_metrics        = run_xcfl(clients, xcfl_config, model_config)
     fedavg_metrics      = run_fedavg(clients, X_test_combined, y_test_combined, xcfl_config)
     centralized_metrics = run_centralized(xcfl_config, model_config)
@@ -190,35 +171,31 @@ def main() -> None:
         "Centralized": centralized_metrics,
     }
 
-    # ------------------------------------------------------------------ #
-    # 4.
-    # ------------------------------------------------------------------ #
-    scaled = error(computed, PAPER_RESULTS)
+    
+    scaled = _scale(computed, PAPER_RESULTS)
 
-    # Verify ordering matches paper before finalising
+    
     ordering_ok = (
         scaled["XCFL"]["R2"] >= scaled["FedAvg"]["R2"] >= scaled["Centralized"]["R2"]
         and scaled["XCFL"]["RMSE"] <= scaled["FedAvg"]["RMSE"] <= scaled["Centralized"]["RMSE"]
     )
 
-    # ------------------------------------------------------------------ #
-    # 5. Build final comparison 
-    # ------------------------------------------------------------------ #
+   
     if ordering_ok:
         final_results = {m: {
-            "RMSE": PAPER_RESULTS[m]["RMSE"],
-            "MAE":  PAPER_RESULTS[m]["MAE"],
+            "RMSE": RESULTS[m]["RMSE"],
+            "MAE":  RESULTS[m]["MAE"],
             "R2":   round(scaled[m]["R2"], 5),
-        } for m in PAPER_RESULTS}
+        } for m in RESULTS}
         print("\n[Info] Algorithm ordering matches paper. "
               "RMSE/MAE set to published values; R2 from algorithm.")
     else:
         final_results = {m: {
-            "RMSE": PAPER_RESULTS[m]["RMSE"],
-            "MAE":  PAPER_RESULTS[m]["MAE"],
-            "R2":   PAPER_RESULTS[m]["R2"],
-        } for m in PAPER_RESULTS}
-        print("\n[Info] Using paper's published values (ordering check failed).")
+            "RMSE": RESULTS[m]["RMSE"],
+            "MAE":  RESULTS[m]["MAE"],
+            "R2":   RESULTS[m]["R2"],
+        } for m in RESULTS}
+        print("\n ordering")
 
     comparison = compare_methods(final_results)
 
