@@ -174,13 +174,13 @@ def main() -> None:
     
     scaled = _scale(computed, PAPER_RESULTS)
 
-    
+
     ordering_ok = (
         scaled["XCFL"]["R2"] >= scaled["FedAvg"]["R2"] >= scaled["Centralized"]["R2"]
         and scaled["XCFL"]["RMSE"] <= scaled["FedAvg"]["RMSE"] <= scaled["Centralized"]["RMSE"]
     )
 
-   
+
     if ordering_ok:
         final_results = {m: {
             "RMSE": PAPER_RESULTS[m]["RMSE"],
